@@ -3,17 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Plus, Trash2, Play, RefreshCw, BarChart3, AlertTriangle,
   TrendingUp, Target, Layers, History, GitCompare, Pencil, X, Save,
-  Clock, DollarSign, Calendar, Settings, Info, Sparkles,
+  Clock, DollarSign, Calendar, Settings, Info, Sparkles, BookTemplate, Download,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAppStore } from '@/store/useAppStore';
 import { formatNumber, formatPercentage } from '../../shared/monteCarlo.js';
-import type { VariableType, CreateVariableDto, UpdateVariableDto, SimulationResult } from '../../shared/types.js';
+import type { VariableType, CreateVariableDto, UpdateVariableDto, SimulationResult, Template, TemplateCategory } from '../../shared/types.js';
 import HistogramChart from '@/components/HistogramChart';
 import SensitivityChart from '@/components/SensitivityChart';
 import StatsCards from '@/components/StatsCards';
 import SimulationHistory from '@/components/SimulationHistory';
 import CompareModal from '@/components/CompareModal';
+import TemplateLibrary from '@/components/TemplateLibrary';
+import TemplateModal from '@/components/TemplateModal';
 
 const VARIABLE_TYPE_CONFIG: Record<VariableType, { label: string; color: string; icon: any; defaultWeight: number; defaultUnit: string }> = {
   cost: { label: '成本', color: 'bg-red-500/20 text-red-300 border-red-500/40', icon: DollarSign, defaultWeight: -1, defaultUnit: '万元' },
@@ -30,6 +32,12 @@ export default function ProjectDetail() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showVarModal, setShowVarModal] = useState(false);
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [showSaveAsTemplate, setShowSaveAsTemplate] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState('');
+  const [saveTemplateCategory, setSaveTemplateCategory] = useState<TemplateCategory>('other');
+  const [saveTemplateDesc, setSaveTemplateDesc] = useState('');
+  const [saveTemplateSubmitting, setSaveTemplateSubmitting] = useState(false);
   const [running, setRunning] = useState(false);
   const [iterations, setIterations] = useState(10000);
   const [threshold, setThreshold] = useState(0);
@@ -159,6 +167,58 @@ export default function ProjectDetail() {
     }
   };
 
+  const handleSaveAsTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentProject || !saveTemplateName.trim() || currentProject.variables.length === 0) return;
+    setSaveTemplateSubmitting(true);
+    try {
+      await api.templates.create({
+        name: saveTemplateName.trim(),
+        category: saveTemplateCategory,
+        description: saveTemplateDesc.trim(),
+        variables: currentProject.variables.map(v => ({
+          name: v.name,
+          type: v.type,
+          min: v.min,
+          max: v.max,
+          mostLikely: v.mostLikely,
+          weight: v.weight,
+          unit: v.unit,
+        })),
+      });
+      setShowSaveAsTemplate(false);
+      setSaveTemplateName('');
+      setSaveTemplateDesc('');
+      alert('模板保存成功！');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaveTemplateSubmitting(false);
+    }
+  };
+
+  const handleApplyTemplate = async (template: Template) => {
+    if (!currentProject) return;
+    if (!confirm(`将模板「${template.name}」的 ${template.variables.length} 个变量添加到当前项目？`)) return;
+    try {
+      for (const tv of template.variables) {
+        const v = await api.projects.addVariable(id, {
+          name: tv.name,
+          type: tv.type,
+          min: tv.min,
+          max: tv.max,
+          mostLikely: tv.mostLikely,
+          weight: tv.weight,
+          unit: tv.unit,
+        });
+        addVariable(v);
+      }
+      setShowTemplateLibrary(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '应用模板失败');
+    }
+  };
+
   const riskLevel = useMemo(() => {
     if (!currentSimulation) return null;
     const p = currentSimulation.lossProbability;
@@ -214,6 +274,23 @@ export default function ProjectDetail() {
                 <button onClick={() => setShowVarModal(true)} className="btn-primary text-sm py-1.5">
                   <Plus className="w-4 h-4" />
                   添加变量
+                </button>
+                <button
+                  onClick={() => { setSaveTemplateName(currentProject.name + ' - 模板'); setShowSaveAsTemplate(true); }}
+                  disabled={currentProject.variables.length === 0}
+                  className="btn-secondary text-sm py-1.5"
+                  title="保存为模板"
+                >
+                  <BookTemplate className="w-4 h-4" />
+                  存为模板
+                </button>
+                <button
+                  onClick={() => setShowTemplateLibrary(true)}
+                  className="btn-secondary text-sm py-1.5"
+                  title="从模板导入变量"
+                >
+                  <Download className="w-4 h-4" />
+                  导入模板
                 </button>
               </div>
               <div className="overflow-x-auto">
@@ -657,6 +734,76 @@ export default function ProjectDetail() {
           onClose={() => setShowCompareModal(false)}
           onCreated={(compareId) => navigate(`/project/${id}/compare/${compareId}`)}
         />
+      )}
+
+      {showTemplateLibrary && (
+        <TemplateLibrary
+          onClose={() => setShowTemplateLibrary(false)}
+          onUseTemplate={handleApplyTemplate}
+        />
+      )}
+
+      {showSaveAsTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md shadow-2xl relative">
+            <button onClick={() => setShowSaveAsTemplate(false)} className="absolute top-4 right-4 p-1.5 rounded-lg text-monte-muted hover:text-white hover:bg-monte-border transition-all">
+              <X className="w-4 h-4" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <BookTemplate className="w-5 h-5 text-monte-accent" />
+              保存为模板
+            </h2>
+            <p className="text-sm text-monte-muted mb-4">
+              将当前项目的 {currentProject?.variables.length || 0} 个变量保存为可复用模板
+            </p>
+            <form onSubmit={handleSaveAsTemplate} className="space-y-4">
+              <div>
+                <label className="label">模板名称 *</label>
+                <input
+                  type="text"
+                  value={saveTemplateName}
+                  onChange={e => setSaveTemplateName(e.target.value)}
+                  placeholder="例如：建筑工程标准变量组"
+                  className="input"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="label">业务分类</label>
+                <select
+                  value={saveTemplateCategory}
+                  onChange={e => setSaveTemplateCategory(e.target.value as TemplateCategory)}
+                  className="input"
+                >
+                  <option value="engineering">工程建设</option>
+                  <option value="software">软件开发</option>
+                  <option value="finance">金融投资</option>
+                  <option value="manufacturing">制造生产</option>
+                  <option value="marketing">市场营销</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              <div>
+                <label className="label">适用说明</label>
+                <textarea
+                  value={saveTemplateDesc}
+                  onChange={e => setSaveTemplateDesc(e.target.value)}
+                  placeholder="描述模板适用的场景..."
+                  rows={2}
+                  className="input resize-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setShowSaveAsTemplate(false)} className="btn-secondary flex-1">
+                  取消
+                </button>
+                <button type="submit" disabled={saveTemplateSubmitting || !saveTemplateName.trim()} className="btn-primary flex-1">
+                  {saveTemplateSubmitting ? '保存中...' : '保存模板'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

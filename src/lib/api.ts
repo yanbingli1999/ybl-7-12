@@ -1,7 +1,8 @@
 import type {
   Project, ProjectWithVariables, Variable, SimulationResult, CompareRecord,
   CreateProjectDto, UpdateProjectDto, CreateVariableDto, UpdateVariableDto,
-  RunSimulationDto, CreateCompareDto,
+  RunSimulationDto, CreateCompareDto, Template, CreateTemplateDto, UpdateTemplateDto,
+  CreateProjectFromTemplateDto,
 } from '../../shared/types.js';
 
 const API_BASE = '/api';
@@ -23,6 +24,8 @@ export const api = {
     list: () => request<Array<Project & { variableCount: number; simulationCount: number; lastSimulationAt: string | null }>>('/projects'),
     get: (id: string) => request<ProjectWithVariables>(`/projects/${id}`),
     create: (dto: CreateProjectDto) => request<Project>('/projects', { method: 'POST', body: JSON.stringify(dto) }),
+    createFromTemplate: (dto: CreateProjectFromTemplateDto) =>
+      request<ProjectWithVariables>('/projects/from-template', { method: 'POST', body: JSON.stringify(dto) }),
     update: (id: string, dto: UpdateProjectDto) => request<Project>(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
     remove: (id: string) => request<{ success: boolean }>(`/projects/${id}`, { method: 'DELETE' }),
     addVariable: (projectId: string, dto: CreateVariableDto) =>
@@ -46,5 +49,13 @@ export const api = {
     create: (projectId: string, dto: CreateCompareDto) =>
       request<CompareRecord>(`/compare/project/${projectId}`, { method: 'POST', body: JSON.stringify(dto) }),
     remove: (id: string) => request<{ success: boolean }>(`/compare/${id}`, { method: 'DELETE' }),
+  },
+  templates: {
+    list: () => request<Template[]>('/templates'),
+    get: (id: string) => request<Template>(`/templates/${id}`),
+    create: (dto: CreateTemplateDto) => request<Template>('/templates', { method: 'POST', body: JSON.stringify(dto) }),
+    update: (id: string, dto: UpdateTemplateDto) => request<Template>(`/templates/${id}`, { method: 'PUT', body: JSON.stringify(dto) }),
+    remove: (id: string) => request<{ success: boolean }>(`/templates/${id}`, { method: 'DELETE' }),
+    copy: (id: string) => request<Template>(`/templates/${id}/copy`, { method: 'POST' }),
   },
 };

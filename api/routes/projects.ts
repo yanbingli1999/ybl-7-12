@@ -1,13 +1,14 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { createStore } from '../storage/fileStore.js';
-import type { Project, Variable, ProjectWithVariables, CreateProjectDto, UpdateProjectDto, CreateVariableDto } from '../../shared/types.js';
+import type { Project, Variable, ProjectWithVariables, CreateProjectDto, UpdateProjectDto, CreateVariableDto, CreateProjectFromTemplateDto } from '../../shared/types.js';
 
 const router = Router();
 const projectsStore = createStore<Project>('projects');
 const variablesStore = createStore<Variable>('variables');
 const simulationsStore = createStore<{ id: string; projectId: string }>('simulations');
 const comparisonsStore = createStore<{ id: string; projectId: string }>('comparisons');
+const templatesStore = createStore<{ id: string; name: string; category: string; description: string; variables: any[]; createdAt: string; updatedAt: string }>('templates');
 
 function getProjectWithVariables(projectId: string): ProjectWithVariables | null {
   const project = projectsStore.getById(projectId);
@@ -141,6 +142,50 @@ router.post('/:id/variables', (req: Request, res: Response) => {
   projectsStore.update(projectId, { updatedAt: new Date().toISOString() });
   const created = variablesStore.create(variable);
   res.status(201).json(created);
+});
+
+router.post('/from-template', (req: Request, res: Response) => {
+  const dto = req.body as CreateProjectFromTemplateDto;
+  if (!dto.name || dto.name.trim() === '') {
+    res.status(400).json({ error: '项目名称不能为空' });
+    return;
+  }
+
+  const template = templatesStore.getById(dto.templateId);
+  if (!template) {
+    res.status(404).json({ error: '模板不存在' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const project: Project = {
+    id: uuidv4(),
+    name: dto.name.trim(),
+    description: dto.description?.trim() || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  projectsStore.create(project);
+
+  const createdVariables: Variable[] = [];
+  for (const tv of template.variables) {
+    const variable: Variable = {
+      id: uuidv4(),
+      projectId: project.id,
+      name: tv.name,
+      type: tv.type || 'custom',
+      min: Number(tv.min),
+      max: Number(tv.max),
+      mostLikely: Number(tv.mostLikely),
+      weight: Number(tv.weight) ?? 1,
+      unit: tv.unit?.trim() || '',
+      createdAt: now,
+    };
+    variablesStore.create(variable);
+    createdVariables.push(variable);
+  }
+
+  res.status(201).json({ ...project, variables: createdVariables });
 });
 
 export default router;

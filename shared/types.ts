@@ -1,5 +1,7 @@
 export type VariableType = 'cost' | 'duration' | 'revenue' | 'custom';
 
+export type TemplateCategory = 'engineering' | 'software' | 'finance' | 'manufacturing' | 'marketing' | 'other';
+
 export interface Variable {
   id: string;
   projectId: string;
@@ -11,6 +13,26 @@ export interface Variable {
   weight: number;
   unit: string;
   createdAt: string;
+}
+
+export interface TemplateVariable {
+  name: string;
+  type: VariableType;
+  min: number;
+  max: number;
+  mostLikely: number;
+  weight: number;
+  unit: string;
+}
+
+export interface Template {
+  id: string;
+  name: string;
+  category: TemplateCategory;
+  description: string;
+  variables: TemplateVariable[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Project {
@@ -118,4 +140,24 @@ export interface RunSimulationDto {
 export interface CreateCompareDto {
   name: string;
   simulationIds: string[];
+}
+
+export interface CreateTemplateDto {
+  name: string;
+  category: TemplateCategory;
+  description: string;
+  variables: TemplateVariable[];
+}
+
+export interface UpdateTemplateDto {
+  name?: string;
+  category?: TemplateCategory;
+  description?: string;
+  variables?: TemplateVariable[];
+}
+
+export interface CreateProjectFromTemplateDto {
+  name: string;
+  description: string;
+  templateId: string;
 }

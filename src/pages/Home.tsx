@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, Play, FolderKanban, Activity, Calendar, X } from 'lucide-react';
+import { Plus, Trash2, Play, FolderKanban, Activity, Calendar, X, BookTemplate } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAppStore } from '@/store/useAppStore';
-import type { Project } from '../../shared/types.js';
+import type { Project, Template } from '../../shared/types.js';
+import TemplateLibrary from '@/components/TemplateLibrary';
 
 type ProjectListItem = Project & {
   variableCount: number;
@@ -15,6 +16,11 @@ export default function Home() {
   const navigate = useNavigate();
   const { projects, setProjects, setLoading, setError } = useAppStore();
   const [showModal, setShowModal] = useState(false);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+  const [usingTemplate, setUsingTemplate] = useState<Template | null>(null);
+  const [templateName, setTemplateName] = useState('');
+  const [templateDesc, setTemplateDesc] = useState('');
+  const [templateSubmitting, setTemplateSubmitting] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -65,6 +71,34 @@ export default function Home() {
       alert(err instanceof Error ? err.message : '删除失败');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleUseTemplate = (template: Template) => {
+    setUsingTemplate(template);
+    setTemplateName(template.name);
+    setTemplateDesc('');
+    setShowTemplateLibrary(false);
+  };
+
+  const handleCreateFromTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!templateName.trim() || !usingTemplate) return;
+    setTemplateSubmitting(true);
+    try {
+      const created = await api.projects.createFromTemplate({
+        name: templateName.trim(),
+        description: templateDesc.trim(),
+        templateId: usingTemplate.id,
+      });
+      setUsingTemplate(null);
+      setTemplateName('');
+      setTemplateDesc('');
+      navigate(`/project/${created.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '创建失败');
+    } finally {
+      setTemplateSubmitting(false);
     }
   };
 
@@ -119,6 +153,10 @@ export default function Home() {
           <button onClick={() => setShowModal(true)} className="btn-primary">
             <Plus className="w-4 h-4" />
             新建项目
+          </button>
+          <button onClick={() => setShowTemplateLibrary(true)} className="btn-secondary">
+            <BookTemplate className="w-4 h-4" />
+            模板库
           </button>
         </div>
 
@@ -196,6 +234,73 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {showTemplateLibrary && (
+        <TemplateLibrary
+          onClose={() => setShowTemplateLibrary(false)}
+          onUseTemplate={handleUseTemplate}
+        />
+      )}
+
+      {usingTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card w-full max-w-md shadow-2xl relative">
+            <button
+              onClick={() => { setUsingTemplate(null); setTemplateName(''); setTemplateDesc(''); }}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-monte-muted hover:text-white hover:bg-monte-border transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <BookTemplate className="w-5 h-5 text-monte-accent" />
+              从模板创建项目
+            </h2>
+            <p className="text-sm text-monte-muted mb-4">
+              基于模板「{usingTemplate.name}」创建，将自动填充 {usingTemplate.variables.length} 个变量
+            </p>
+            <div className="mb-4 p-3 rounded-lg bg-monte-bg/50 border border-monte-border/50 max-h-32 overflow-y-auto">
+              <div className="flex flex-wrap gap-1.5">
+                {usingTemplate.variables.map((v, i) => (
+                  <span key={i} className="badge bg-monte-accent/10 text-monte-accent border border-monte-accent/20">
+                    {v.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <form onSubmit={handleCreateFromTemplate} className="space-y-4">
+              <div>
+                <label className="label">项目名称 *</label>
+                <input
+                  type="text"
+                  value={templateName}
+                  onChange={e => setTemplateName(e.target.value)}
+                  placeholder="例如：XX项目风险评估"
+                  className="input"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="label">项目描述</label>
+                <textarea
+                  value={templateDesc}
+                  onChange={e => setTemplateDesc(e.target.value)}
+                  placeholder="项目简单介绍..."
+                  rows={2}
+                  className="input resize-none"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => { setUsingTemplate(null); setTemplateName(''); setTemplateDesc(''); }} className="btn-secondary flex-1">
+                  取消
+                </button>
+                <button type="submit" disabled={templateSubmitting || !templateName.trim()} className="btn-primary flex-1">
+                  {templateSubmitting ? '创建中...' : '创建项目'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
