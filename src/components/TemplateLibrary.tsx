@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   BookTemplate, Pencil, Copy, Trash2, X, Filter, Clock, DollarSign,
   TrendingUp, Calendar, Settings, ChevronDown, Layers, Plus, Search,
+  AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { Template, TemplateCategory, TemplateVariable, VariableType } from '../../shared/types.js';
@@ -31,6 +32,7 @@ interface TemplateLibraryProps {
 export default function TemplateLibrary({ onClose, onUseTemplate }: TemplateLibraryProps) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<TemplateCategory | 'all'>('all');
   const [searchText, setSearchText] = useState('');
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
@@ -40,10 +42,13 @@ export default function TemplateLibrary({ onClose, onUseTemplate }: TemplateLibr
 
   const loadTemplates = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const list = await api.templates.list();
       setTemplates(list);
     } catch (err) {
+      const msg = err instanceof Error ? err.message : '加载失败';
+      setLoadError(msg);
       console.error('加载模板失败', err);
     } finally {
       setLoading(false);
@@ -77,35 +82,26 @@ export default function TemplateLibrary({ onClose, onUseTemplate }: TemplateLibr
   };
 
   const handleSaveEdit = async (template: Template) => {
-    try {
-      if (editingTemplate) {
-        const updated = await api.templates.update(editingTemplate.id, {
-          name: template.name,
-          category: template.category,
-          description: template.description,
-          variables: template.variables,
-        });
-        setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? updated : t));
-        setEditingTemplate(null);
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '保存失败');
-    }
+    if (!editingTemplate) return;
+    const updated = await api.templates.update(editingTemplate.id, {
+      name: template.name,
+      category: template.category,
+      description: template.description,
+      variables: template.variables,
+    });
+    setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? updated : t));
+    setEditingTemplate(null);
   };
 
   const handleCreate = async (template: Template) => {
-    try {
-      const created = await api.templates.create({
-        name: template.name,
-        category: template.category,
-        description: template.description,
-        variables: template.variables,
-      });
-      setTemplates(prev => [...prev, created]);
-      setShowCreateModal(false);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '创建失败');
-    }
+    const created = await api.templates.create({
+      name: template.name,
+      category: template.category,
+      description: template.description,
+      variables: template.variables,
+    });
+    setTemplates(prev => [...prev, created]);
+    setShowCreateModal(false);
   };
 
   const filteredTemplates = templates.filter(t => {
@@ -173,10 +169,34 @@ export default function TemplateLibrary({ onClose, onUseTemplate }: TemplateLibr
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+          {loadError && (
+            <div className="p-3 rounded-lg bg-monte-danger/10 border border-monte-danger/40 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-monte-danger flex-shrink-0" />
+                <span className="text-sm text-monte-danger font-medium">加载失败：{loadError}</span>
+              </div>
+              <button onClick={loadTemplates} className="btn-secondary text-xs !py-1 !px-2.5 whitespace-nowrap">
+                <RefreshCw className="w-3.5 h-3.5" />
+                重试
+              </button>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-20 text-monte-muted">
               <div className="animate-spin w-6 h-6 border-2 border-monte-accent border-t-transparent rounded-full mr-3" />
               加载中...
+            </div>
+          ) : loadError ? (
+            <div className="flex flex-col items-center justify-center py-20 text-monte-muted">
+              <div className="w-16 h-16 mb-4 rounded-2xl bg-monte-danger/10 border border-monte-danger/30 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-monte-danger" />
+              </div>
+              <p className="text-monte-danger font-medium mb-2">模板加载失败</p>
+              <p className="text-sm text-monte-muted mb-4">{loadError}</p>
+              <button onClick={loadTemplates} className="btn-secondary text-sm">
+                <RefreshCw className="w-4 h-4" />
+                重新加载
+              </button>
             </div>
           ) : filteredTemplates.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-monte-muted">

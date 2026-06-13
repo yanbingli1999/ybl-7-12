@@ -6,6 +6,34 @@ import type { Template, CreateTemplateDto, UpdateTemplateDto } from '../../share
 const router = Router();
 const templatesStore = createStore<Template>('templates');
 
+function validateVariables(variables: any[]): string | null {
+  for (let i = 0; i < variables.length; i++) {
+    const v = variables[i];
+    const row = `第 ${i + 1} 行变量`;
+    if (!v.name || v.name.trim() === '') {
+      return `${row}：名称不能为空`;
+    }
+    const min = Number(v.min);
+    const max = Number(v.max);
+    const mostLikely = Number(v.mostLikely);
+    if (Number.isNaN(min) || Number.isNaN(max) || Number.isNaN(mostLikely)) {
+      return `${row}：三点估算值必须为有效数字`;
+    }
+    if (!(min < mostLikely && mostLikely < max)) {
+      if (min >= max) {
+        return `${row}：最小值必须小于最大值`;
+      }
+      if (mostLikely <= min) {
+        return `${row}：最可能值必须大于最小值`;
+      }
+      if (mostLikely >= max) {
+        return `${row}：最可能值必须小于最大值`;
+      }
+    }
+  }
+  return null;
+}
+
 router.get('/', (_req: Request, res: Response) => {
   const templates = templatesStore.getAll();
   res.json(templates);
@@ -28,6 +56,12 @@ router.post('/', (req: Request, res: Response) => {
   }
   if (!dto.variables || dto.variables.length === 0) {
     res.status(400).json({ error: '模板至少需要一个变量' });
+    return;
+  }
+
+  const varError = validateVariables(dto.variables);
+  if (varError) {
+    res.status(400).json({ error: varError });
     return;
   }
 
@@ -76,6 +110,11 @@ router.put('/:id', (req: Request, res: Response) => {
   if (dto.variables !== undefined) {
     if (dto.variables.length === 0) {
       res.status(400).json({ error: '模板至少需要一个变量' });
+      return;
+    }
+    const varError = validateVariables(dto.variables);
+    if (varError) {
+      res.status(400).json({ error: varError });
       return;
     }
     updates.variables = dto.variables.map(v => ({
